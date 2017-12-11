@@ -8,7 +8,29 @@ class Box:
         self.x, self.y = float(), float()
         self.w, self.h = float(), float()
         self.class_num = 0
+        self.left, self.right = int(), int()
+        self.top, self.bot = int(), int()
 
+def img_process(img,is_cut=False, cut_area=[300,650,500,1280]):
+    if is_cut:
+        if cut_area[0] < 0:
+            cut_area[0] = 0
+        if cut_area[1] > img.shape[0]:
+            cut_area[1] = img.shape[0]
+        if cut_area[2] < 0:
+            cut_area[2] = 0
+        if cut_area[3] > img.shape[1]:
+            cut_area[3] = img.shape[1]
+    # 剪切图片
+    cropped_img = img[cut_area[0]:cut_area[1],cut_area[2]:cut_area[3],:]
+    # COCO数据集尺寸 448X448
+    resized_img = cv2.resize(cropped_img,(448,448))
+    # 提取颜色 （可省略）
+    color_batch = np.array([resized_img[:,:,0],resized_img[:,:,1],resized_img[:,:,2]])
+    # 均一化
+    nor_batch = 2*(color_batch/255.) - 1
+    nor_batch = np.expand_dims(nor_batch, axis=0)
+    return nor_batch, cut_area
 # ------------------------------------------
 # 
 # ref https://github.com/sunshineatnoon/Darknet.keras/blob/master/RunTinyYOLO.py
@@ -37,7 +59,7 @@ def box_iou(a, b):
     return box_intersection(a, b) / box_union(a, b)
 # -------------------------------------------------------------------------------------
 
-def network_to_boxes(network_out, threshold = 0.2, sqrt=1.8, classes=20, num=2, side=7):
+def network_to_boxes(network_out, img, threshold = 0.2, cropped_area=[[500,1280],[300,650]], sqrt=1.8, classes=20, num=2, side=7):
     """
     输入 神经网络softmax系数
     输出 
@@ -66,6 +88,20 @@ def network_to_boxes(network_out, threshold = 0.2, sqrt=1.8, classes=20, num=2, 
                 bx.prob = p_idx[class_num]
                 boxes.append(bx)
                 
+    # get
+    [xmin,xmax] = cropped_area[0]
+    [ymin,ymax] = cropped_area[1]
+    h, w, _ = img.shape
+    for b in boxes:
+        left  = int ((b.x - b.w/2.) * w)
+        right = int ((b.x + b.w/2.) * w)
+        top   = int ((b.y - b.h/2.) * h)
+        bot   = int ((b.y + b.h/2.) * h)
+        b.left = int(left*(xmax-xmin)/w + xmin)
+        b.right = int(right*(xmax-xmin)/w + xmin)
+        b.top = int(top*(ymax-ymin)/h + ymin)
+        b.bot = int(bot*(ymax-ymin)/h + ymin)
+#--------------------------------------
     # 处理重叠窗口
     for i in range(len(boxes)):
         box_i = boxes[i]
@@ -80,21 +116,23 @@ def boxes_drawing(img, boxes, cropped_area=[[500,1280],[300,650]]):
     copy_img = np.copy(img)
     [xmin,xmax] = cropped_area[0]
     [ymin,ymax] = cropped_area[1]
+    h, w, _ = copy_img.shape 
     # 
     #
     for b in boxes:
-        h, w, _ = copy_img.shape
-        left  = int ((b.x - b.w/2.) * w)
-        right = int ((b.x + b.w/2.) * w)
-        top   = int ((b.y - b.h/2.) * h)
-        bot   = int ((b.y + b.h/2.) * h)
-        left = int(left*(xmax-xmin)/w + xmin)
-        right = int(right*(xmax-xmin)/w + xmin)
-        top = int(top*(ymax-ymin)/h + ymin)
-        bot = int(bot*(ymax-ymin)/h + ymin)
+           
+        # left  = int ((b.x - b.w/2.) * w)
+        # right = int ((b.x + b.w/2.) * w)
+        # top   = int ((b.y - b.h/2.) * h)
+        # bot   = int ((b.y + b.h/2.) * h)
+        # left = int(b.left*(xmax-xmin)/w + xmin)
+        # right = int(b.right*(xmax-xmin)/w + xmin)
+        # top = int(b.top*(ymax-ymin)/h + ymin)
+        # bot = int(b.bot*(ymax-ymin)/h + ymin)
+        left,right,top,bot = b.left, b.right, b.top, b.bot
 
-        if left  < 0    :  left = 0
-        if right > w - 1: right = w - 1
+        if left  < 0    :   left = 0
+        if right > w - 1:   right = w - 1
         if top   < 0    :   top = 0
         if bot   > h - 1:   bot = h - 1
         cv2.rectangle(copy_img, (left, top), (right, bot), (255,255,0), 6)

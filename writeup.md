@@ -86,6 +86,18 @@ I upload other video to youtube.com:
 
 Video pipeline implementation is just like previous projects do, nothing to discuss.
 
+####2. Heatmap method to reduces the number of false positives in several subsequent frames 
+
+The code of this method is `def heatmapping()`in `class Pipeline`
+
+I use deque to save the history heatmap of recent eight frames. If the center point of a box is not in an area the heatmap recognizes, remove that box.
+
+this is six heatmaps for test images:
+
+![](output_images/heatmaps.png)
+
+
+
 ---
 
 ### Discussion
